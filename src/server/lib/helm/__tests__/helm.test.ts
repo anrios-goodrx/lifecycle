@@ -476,5 +476,143 @@ describe('Helm tests', () => {
         'Codefresh Helm deploy path does not support helm.chart.values secret refs'
       );
     });
+
+    test('emits gatewayApi values and suppresses legacy routing when gateway api is enabled', async () => {
+      const mockGetAllConfigs = jest.fn().mockResolvedValue({
+        lifecycleDefaults: {
+          cfStepType: 'helm',
+        },
+        'lifecycle-app': {
+          chart: {
+            values: [],
+          },
+        },
+        serviceDefaults: {
+          defaultIPWhiteList: '[1.1.1.1/32]',
+        },
+        domainDefaults: {
+          http: 'preview.lifecycle.com',
+          altHttp: ['preview-alt.lifecycle.com'],
+          grpc: 'grpc.preview.lifecycle.com',
+          altGrpc: ['grpc-alt.preview.lifecycle.com'],
+        },
+      });
+      const mockGetOrgChartName = jest.fn().mockResolvedValue('lifecycle-app');
+
+      (GlobalConfigService.getInstance as jest.Mock).mockReturnValue({
+        getAllConfigs: mockGetAllConfigs,
+        getOrgChartName: mockGetOrgChartName,
+      });
+
+      const deploy = {
+        uuid: 'test-uuid',
+        dockerImage: 'repo/app:tag',
+        deployable: {
+          name: 'sample-backend',
+          buildUUID: 'build-123',
+          port: 8080,
+          helm: {
+            chart: {
+              name: 'lifecycle-app',
+              values: [],
+            },
+            grpc: true,
+            gatewayApi: {
+              enabled: true,
+              gateway: 'external',
+              gateways: {
+                grpc: {
+                  external: 'community-gateway-grpc',
+                },
+              },
+            },
+            docker: {
+              app: {},
+            },
+          },
+        },
+        build: {
+          namespace: 'env-test',
+          commentRuntimeEnv: {},
+          isStatic: false,
+        },
+        $fetchGraph: jest.fn(),
+      } as unknown as Deploy;
+
+      const result = await helmOrgAppDeployStep(deploy);
+      const customValues = result.arguments.custom_values as string[];
+
+      expect(customValues).toContain('gatewayApi.enabled=true');
+      expect(customValues).toContain('gatewayApi.protocol=grpc');
+      expect(customValues).toContain('gatewayApi.gateway=external');
+      expect(customValues).toContain('gatewayApi.gateways.grpc.external=community-gateway-grpc');
+      expect(customValues).toContain('gatewayApi.port=8080');
+      expect(customValues).toContain('gatewayApi.hostnames[0]=test-uuid.grpc.preview.lifecycle.com');
+      expect(customValues).toContain('gatewayApi.hostnames[1]=test-uuid.grpc-alt.preview.lifecycle.com');
+      expect(customValues).toContain('gatewayApi.securityPolicy.enabled=true');
+      expect(customValues).toContain('gatewayApi.securityPolicy.allowedCIDRs[0]=1.1.1.1/32');
+      expect(customValues.some((value) => value.startsWith('ambassadorMappings['))).toBe(false);
+      expect(customValues.some((value) => value.startsWith('ingress.'))).toBe(false);
+    });
+
+    test('rejects gateway api config without a target when routes are not provided', async () => {
+      const mockGetAllConfigs = jest.fn().mockResolvedValue({
+        lifecycleDefaults: {
+          cfStepType: 'helm',
+        },
+        'lifecycle-app': {
+          chart: {
+            values: [],
+          },
+        },
+        serviceDefaults: {
+          defaultIPWhiteList: '[1.1.1.1/32]',
+        },
+        domainDefaults: {
+          http: 'preview.lifecycle.com',
+          grpc: 'grpc.preview.lifecycle.com',
+        },
+      });
+      const mockGetOrgChartName = jest.fn().mockResolvedValue('lifecycle-app');
+
+      (GlobalConfigService.getInstance as jest.Mock).mockReturnValue({
+        getAllConfigs: mockGetAllConfigs,
+        getOrgChartName: mockGetOrgChartName,
+      });
+
+      const deploy = {
+        uuid: 'test-uuid',
+        dockerImage: 'repo/app:tag',
+        deployable: {
+          name: 'sample-backend',
+          buildUUID: 'build-123',
+          port: 8080,
+          helm: {
+            chart: {
+              name: 'lifecycle-app',
+              values: [],
+            },
+            grpc: true,
+            gatewayApi: {
+              enabled: true,
+              gateway: 'external',
+            },
+            docker: {
+              app: {},
+            },
+          },
+        },
+        build: {
+          namespace: 'env-test',
+          commentRuntimeEnv: {},
+          isStatic: false,
+        },
+        $fetchGraph: jest.fn(),
+      } as unknown as Deploy;
+
+      await expect(helmOrgAppDeployStep(deploy)).rejects.toThrow(
+        'helm.gatewayApi requires gateway or gatewayName when routes are not provided'
+      );
+    });
   });
 });

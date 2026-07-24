@@ -187,6 +187,46 @@ export interface DockerForHelm {
   readonly ecr?: string;
 }
 
+export interface GatewayApiConfig {
+  readonly enabled?: boolean;
+  readonly protocol?: 'http' | 'grpc';
+  readonly gateway?: 'internal' | 'external';
+  readonly gatewayName?: string;
+  readonly gatewayNamespace?: string;
+  readonly port?: number;
+  readonly hostnames?: string[];
+  readonly rules?: Array<Record<string, unknown>>;
+  readonly gateways?: {
+    readonly http?: {
+      readonly internal?: string;
+      readonly external?: string;
+    };
+    readonly grpc?: {
+      readonly internal?: string;
+      readonly external?: string;
+    };
+  };
+  readonly annotations?: Record<string, string>;
+  readonly routes?: Array<{
+    readonly name?: string;
+    readonly gateway?: 'internal' | 'external';
+    readonly gatewayName?: string;
+    readonly hostnames?: string[];
+    readonly annotations?: Record<string, string>;
+    readonly port?: number;
+    readonly rules?: Array<Record<string, unknown>>;
+    readonly securityPolicy?: {
+      readonly annotations?: Record<string, string>;
+      readonly allowedCIDRs?: string[];
+    };
+  }>;
+  readonly securityPolicy?: {
+    readonly enabled?: boolean;
+    readonly annotations?: Record<string, string>;
+    readonly allowedCIDRs?: string[];
+  };
+}
+
 export interface Helm {
   readonly cfStepType: string;
   readonly repository?: string;
@@ -202,6 +242,7 @@ export interface Helm {
   readonly type?: string;
   readonly builder?: Builder;
   readonly envLens?: boolean;
+  readonly gatewayApi?: GatewayApiConfig;
   readonly deploymentMethod?: 'native' | 'ci';
   readonly nativeHelm?: NativeHelmConfig;
   readonly envMapping?: {
@@ -574,7 +615,7 @@ export async function getHelmConfigFromYaml(service: Service): Promise<Helm> {
 
     // Preserve value files from service config if specified
     if (helmService?.chart?.valueFiles?.length > 0) {
-      helmConfig.chart.values = helmService.chart.values;
+      helmConfig.chart.valueFiles = helmService.chart.valueFiles;
     }
 
     return helmConfig as Helm;

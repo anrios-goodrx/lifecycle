@@ -849,6 +849,45 @@ describe('Native Helm', () => {
 
       expect(result.nativeHelm?.postRenderer?.enabled).toBe(false);
     });
+
+    it('deep merges gatewayApi defaults with service overrides', async () => {
+      mockGetAllConfigs.mockResolvedValue({
+        helmDefaults: {
+          gatewayApi: {
+            enabled: true,
+            gatewayNamespace: 'envoy-gateway-system',
+          },
+        },
+        'lifecycle-app': {
+          gatewayApi: {
+            gateway: 'external',
+          },
+          chart: {
+            name: 'lifecycle-app',
+          },
+        },
+      });
+
+      const deploy = {
+        deployable: {
+          helm: {
+            chart: { name: 'lifecycle-app' },
+            gatewayApi: {
+              protocol: 'http',
+            },
+          },
+        },
+      } as any;
+
+      const result = await mergeHelmConfigWithGlobal(deploy);
+
+      expect(result.gatewayApi).toEqual({
+        enabled: true,
+        gatewayNamespace: 'envoy-gateway-system',
+        gateway: 'external',
+        protocol: 'http',
+      });
+    });
   });
 
   describe('constructHelmCustomValues for ORG_CHART ingress', () => {
@@ -1125,6 +1164,70 @@ describe('Native Helm', () => {
       expect(customValues).not.toContain('ingress.host=test-uuid.preview.lifecycle.com');
       expect(customValues).not.toContain('ingress.altHosts[0]=test-uuid.preview-alt.lifecycle.com');
       expect(customValues.some((value) => value.startsWith('ingress.ipAllowlist['))).toBe(false);
+    });
+
+    it('emits gatewayApi values and suppresses legacy routing for opted-in services', async () => {
+      mockGetAllConfigs.mockResolvedValue({
+        serviceDefaults: {
+          defaultIPWhiteList: '[1.1.1.1/32, 2.2.2.2/32]',
+        },
+        domainDefaults: {
+          http: 'preview.lifecycle.com',
+          altHttp: ['preview-alt.lifecycle.com'],
+          grpc: 'grpc.preview.lifecycle.com',
+          altGrpc: ['grpc-alt.preview.lifecycle.com'],
+        },
+        'lifecycle-app': {
+          chart: {
+            values: [],
+          },
+        },
+      });
+
+      const deploy = {
+        uuid: 'test-uuid',
+        dockerImage: 'repo/app:tag',
+        env: {},
+        deployable: {
+          buildUUID: 'build-123',
+          port: 8080,
+          helm: {
+            chart: { name: 'lifecycle-app', values: [] },
+            grpc: true,
+            gatewayApi: {
+              enabled: true,
+              gateway: 'external',
+              gateways: {
+                grpc: {
+                  external: 'community-gateway-grpc',
+                },
+              },
+            },
+            docker: {
+              app: {},
+            },
+          },
+        },
+        build: {
+          commentRuntimeEnv: {},
+          isStatic: false,
+        },
+      } as any;
+
+      const customValues = await constructHelmCustomValues(deploy, ChartType.ORG_CHART);
+
+      expect(customValues).toContain('gatewayApi.enabled=true');
+      expect(customValues).toContain('gatewayApi.protocol=grpc');
+      expect(customValues).toContain('gatewayApi.gateway=external');
+      expect(customValues).toContain('gatewayApi.gateways.grpc.external=community-gateway-grpc');
+      expect(customValues).toContain('gatewayApi.port=8080');
+      expect(customValues).toContain('gatewayApi.hostnames[0]=test-uuid.grpc.preview.lifecycle.com');
+      expect(customValues).toContain('gatewayApi.hostnames[1]=test-uuid.grpc-alt.preview.lifecycle.com');
+      expect(customValues).toContain('gatewayApi.securityPolicy.enabled=true');
+      expect(customValues).toContain('gatewayApi.securityPolicy.allowedCIDRs[0]=1.1.1.1/32');
+      expect(customValues).toContain('gatewayApi.securityPolicy.allowedCIDRs[1]=2.2.2.2/32');
+      expect(customValues.some((value) => value.startsWith('ambassadorMappings['))).toBe(false);
+      expect(customValues.some((value) => value.startsWith('ingress.'))).toBe(false);
     });
 
     it('keeps underscore env keys intact for direct helm values', async () => {

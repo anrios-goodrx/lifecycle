@@ -211,6 +211,95 @@ const schema_1_0_0 = {
               },
               envLens: { type: 'boolean' },
               grpc: { type: 'boolean' },
+              gatewayApi: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                  enabled: { type: 'boolean' },
+                  protocol: { type: 'string', enum: ['http', 'grpc'] },
+                  gateway: { type: 'string', enum: ['internal', 'external'] },
+                  gatewayName: { type: 'string' },
+                  gatewayNamespace: { type: 'string' },
+                  port: { type: 'number' },
+                  hostnames: { type: 'array', items: { type: 'string' } },
+                  rules: {
+                    type: 'array',
+                    items: { type: 'object', additionalProperties: true },
+                  },
+                  gateways: {
+                    type: 'object',
+                    additionalProperties: false,
+                    properties: {
+                      http: {
+                        type: 'object',
+                        additionalProperties: false,
+                        properties: {
+                          internal: { type: 'string' },
+                          external: { type: 'string' },
+                        },
+                      },
+                      grpc: {
+                        type: 'object',
+                        additionalProperties: false,
+                        properties: {
+                          internal: { type: 'string' },
+                          external: { type: 'string' },
+                        },
+                      },
+                    },
+                  },
+                  annotations: {
+                    type: 'object',
+                    additionalProperties: { type: 'string' },
+                  },
+                  routes: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      additionalProperties: false,
+                      properties: {
+                        name: { type: 'string' },
+                        gateway: { type: 'string', enum: ['internal', 'external'] },
+                        gatewayName: { type: 'string' },
+                        hostnames: { type: 'array', items: { type: 'string' } },
+                        annotations: {
+                          type: 'object',
+                          additionalProperties: { type: 'string' },
+                        },
+                        port: { type: 'number' },
+                        rules: {
+                          type: 'array',
+                          items: { type: 'object', additionalProperties: true },
+                        },
+                        securityPolicy: {
+                          type: 'object',
+                          additionalProperties: false,
+                          properties: {
+                            annotations: {
+                              type: 'object',
+                              additionalProperties: { type: 'string' },
+                            },
+                            allowedCIDRs: { type: 'array', items: { type: 'string' } },
+                          },
+                        },
+                      },
+                    },
+                  },
+                  securityPolicy: {
+                    type: 'object',
+                    additionalProperties: false,
+                    properties: {
+                      enabled: { type: 'boolean' },
+                      annotations: {
+                        type: 'object',
+                        additionalProperties: { type: 'string' },
+                      },
+                      allowedCIDRs: { type: 'array', items: { type: 'string' } },
+                    },
+                  },
+                },
+                required: ['enabled'],
+              },
               disableIngressHost: { type: 'boolean' },
               overrideDefaultIpWhitelist: { type: 'boolean' },
               docker,

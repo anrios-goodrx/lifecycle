@@ -123,6 +123,20 @@ function serializeHelmNestedValue(path: string, value: unknown, quoteStrings: bo
   );
 }
 
+export function serializeHelmValues(
+  value: Record<string, unknown> | null | undefined,
+  pathPrefix: string,
+  { quoteStringValues = false } = {}
+): string[] {
+  if (!value) {
+    return [];
+  }
+
+  return Object.entries(value).flatMap(([key, nestedValue]) =>
+    serializeHelmNestedValue(`${pathPrefix}.${key}`, nestedValue, quoteStringValues)
+  );
+}
+
 export function serializeHelmEnvMap(
   envVars: Record<string, any> | null | undefined,
   pathPrefix: string,

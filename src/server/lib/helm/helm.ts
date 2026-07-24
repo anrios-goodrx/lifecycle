@@ -32,6 +32,7 @@ import {
   generateTolerationsCustomValues,
   renderTemplate,
   serializeHelmEnvMap,
+  serializeHelmValues,
   scaffoldHelmSecretRefs,
 } from 'server/lib/helm/utils';
 import { generateCheckoutStep } from 'server/lib/codefresh/utils';
@@ -42,6 +43,7 @@ import {
 } from 'server/lib/codefresh/utils/generateCodefreshCmd';
 import { randomAlphanumeric } from '../random';
 import { assertNoHelmSecretValueRefs } from 'server/lib/helm/secretValueRefs';
+import { buildLifecycleGatewayApiConfig } from 'server/lib/helm/gatewayApi';
 
 const CODEFRESH_PATH = `${TMP_PATH}/codefresh`;
 const escapeCodefreshEnvKey = (key: string) => key.replace(/_/g, '__');
@@ -170,7 +172,9 @@ export async function helmOrgAppDeployStep(deploy: Deploy): Promise<Record<strin
   const isDisableIngressHost: boolean | undefined = helm?.disableIngressHost;
   const grpc: boolean | undefined = helm?.grpc;
   const ingress = await httpIngress(deploy);
-  if (grpc) {
+  if (helm?.gatewayApi?.enabled) {
+    customValues.push(...(await gatewayApiValues(deploy)));
+  } else if (grpc) {
     const mappings = await grpcMapping(deploy);
     customValues.push(...mappings);
     if (isDisableIngressHost === false) customValues.push(...ingress, ...addHelmCustomValues());
@@ -450,6 +454,24 @@ export async function uninstallHelmReleases(build: Build) {
  */
 function addHelmCustomValues(): string[] {
   return [];
+}
+
+async function gatewayApiValues(deploy: Deploy): Promise<string[]> {
+  const { domainDefaults, serviceDefaults } = await GlobalConfigService.getInstance().getAllConfigs();
+  const gatewayApi = deploy.deployable?.helm?.gatewayApi;
+
+  if (!gatewayApi?.enabled) {
+    return [];
+  }
+
+  return serializeHelmValues(
+    buildLifecycleGatewayApiConfig({
+      deploy,
+      domainDefaults,
+      serviceDefaults,
+    }),
+    'gatewayApi'
+  );
 }
 
 export async function grpcMapping(deploy: Deploy): Promise<string[]> {

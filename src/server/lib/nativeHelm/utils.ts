@@ -26,6 +26,7 @@ import {
   generateNodeSelector,
   serializeHelmEnvArray,
   serializeHelmEnvMap,
+  serializeHelmValues,
   scaffoldHelmSecretRefs,
 } from 'server/lib/helm/utils';
 import { staticEnvTolerations } from 'server/lib/helm/constants';
@@ -37,6 +38,7 @@ import {
   NativeHelmPostRendererConfig,
 } from 'server/services/types/globalConfig';
 import { HelmSecretSetFile, HelmValueSecretRef, splitHelmSecretValueRefs } from 'server/lib/helm/secretValueRefs';
+import { buildLifecycleGatewayApiConfig } from 'server/lib/helm/gatewayApi';
 
 export type HelmPostRendererConfig = NativeHelmPostRendererConfig;
 
@@ -321,6 +323,14 @@ export async function mergeHelmConfigWithGlobal(deploy: Deploy): Promise<any> {
     nodeSelector: helm.nodeSelector ?? chartConfig.nodeSelector ?? helmDefaults.nodeSelector,
 
     grpc: helm.grpc,
+    gatewayApi:
+      helmDefaults.gatewayApi || chartConfig.gatewayApi || helm.gatewayApi
+        ? {
+            ...(helmDefaults.gatewayApi || {}),
+            ...(chartConfig.gatewayApi || {}),
+            ...(helm.gatewayApi || {}),
+          }
+        : undefined,
     disableIngressHost: helm.disableIngressHost,
     deploymentMethod: helm.deploymentMethod,
     type: helm.type,
@@ -603,6 +613,26 @@ function addNativeHelmCustomValues(): string[] {
   return [];
 }
 
+async function constructGatewayApiValues(deploy: Deploy): Promise<string[]> {
+  const { domainDefaults, serviceDefaults } = await GlobalConfigService.getInstance().getAllConfigs();
+  const mergedHelmConfig = await mergeHelmConfigWithGlobal(deploy);
+  const gatewayApi = mergedHelmConfig?.gatewayApi;
+
+  if (!gatewayApi?.enabled) {
+    return [];
+  }
+
+  return serializeHelmValues(
+    buildLifecycleGatewayApiConfig({
+      deploy,
+      domainDefaults,
+      serviceDefaults,
+      helmConfig: mergedHelmConfig,
+    }),
+    'gatewayApi'
+  );
+}
+
 async function constructGrpcMappings(deploy: Deploy): Promise<string[]> {
   const { domainDefaults } = await GlobalConfigService.getInstance().getAllConfigs();
   const hosts = [domainDefaults.grpc, ...(domainDefaults?.altGrpc || [])];
@@ -761,7 +791,9 @@ export async function constructHelmCustomValueConfiguration(
     const grpc: boolean | undefined = helm?.grpc;
     const ingressValues = await constructHttpIngressValues(deploy);
 
-    if (grpc) {
+    if (helm?.gatewayApi?.enabled) {
+      customValues.push(...generatedValueEntries(await constructGatewayApiValues(deploy)));
+    } else if (grpc) {
       customValues.push(...generatedValueEntries(await constructGrpcMappings(deploy)));
       if (isDisableIngressHost === false) {
         customValues.push(...generatedValueEntries([...ingressValues, ...addNativeHelmCustomValues()]));

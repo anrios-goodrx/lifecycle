@@ -173,6 +173,71 @@ services:
       envLens: false
       # @param services.helm.grpc
       grpc: false
+      # @param services.helm.gatewayApi
+      gatewayApi:
+        # @param services.helm.gatewayApi.enabled (required)
+        enabled: false
+        # @param services.helm.gatewayApi.protocol
+        protocol: ''
+        # @param services.helm.gatewayApi.gateway
+        gateway: ''
+        # @param services.helm.gatewayApi.gatewayName
+        gatewayName: ''
+        # @param services.helm.gatewayApi.gatewayNamespace
+        gatewayNamespace: ''
+        # @param services.helm.gatewayApi.port
+        port: 0
+        # @param services.helm.gatewayApi.hostnames
+        hostnames:
+          # @param services.helm.gatewayApi.hostnames[]
+          - ''
+        # @param services.helm.gatewayApi.rules
+        rules:
+          # @param services.helm.gatewayApi.rules[]
+          {}
+        # @param services.helm.gatewayApi.gateways
+        gateways:
+          # @param services.helm.gatewayApi.gateways.http
+          http:
+            # @param services.helm.gatewayApi.gateways.http.internal
+            internal: ''
+            # @param services.helm.gatewayApi.gateways.http.external
+            external: ''
+          # @param services.helm.gatewayApi.gateways.grpc
+          grpc:
+            # @param services.helm.gatewayApi.gateways.grpc.internal
+            internal: ''
+            # @param services.helm.gatewayApi.gateways.grpc.external
+            external: ''
+        # @param services.helm.gatewayApi.annotations
+        annotations: {}
+        # @param services.helm.gatewayApi.routes
+        routes:
+          # @param services.helm.gatewayApi.routes[]
+          - name: ''
+            gateway: ''
+            gatewayName: ''
+            hostnames:
+              - ''
+            annotations: {}
+            port: 0
+            rules:
+              - {}
+            securityPolicy:
+              annotations: {}
+              allowedCIDRs:
+                - ''
+        # @param services.helm.gatewayApi.securityPolicy
+        securityPolicy:
+          # @param services.helm.gatewayApi.securityPolicy.enabled
+          enabled: false
+          # @param services.helm.gatewayApi.securityPolicy.annotations
+          annotations: {}
+          # @param services.helm.gatewayApi.securityPolicy.allowedCIDRs
+          allowedCIDRs:
+            # @param services.helm.gatewayApi.securityPolicy.allowedCIDRs[]
+            - ''
+
       # @param services.helm.disableIngressHost
       disableIngressHost: false
       # @param services.helm.overrideDefaultIpWhitelist

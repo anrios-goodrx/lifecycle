@@ -232,6 +232,48 @@ services:
       expect(() => new YamlConfigValidator().validate_1_0_0(config)).not.toThrow();
     });
 
+    test('accepts explicit gateway api config for helm services', () => {
+      const parser = new YamlConfigParser();
+      const config = parser.parseYamlConfigFromString(`---
+version: '1.0.0'
+services:
+  - name: 'gateway-app'
+    helm:
+      chart:
+        name: 'lifecycle-app'
+      gatewayApi:
+        enabled: true
+        protocol: 'http'
+        gatewayName: 'community-gateway-http'
+        gatewayNamespace: 'envoy-gateway-system'
+        port: 8080
+        securityPolicy:
+          enabled: true
+          allowedCIDRs:
+            - '1.1.1.1/32'
+`);
+
+      expect(() => new YamlConfigValidator().validate_1_0_0(config)).not.toThrow();
+    });
+
+    test('rejects invalid gateway api protocol for helm services', () => {
+      const parser = new YamlConfigParser();
+      const config = parser.parseYamlConfigFromString(`---
+version: '1.0.0'
+services:
+  - name: 'gateway-app'
+    helm:
+      chart:
+        name: 'lifecycle-app'
+      gatewayApi:
+        enabled: true
+        protocol: 'tcp'
+        gatewayName: 'community-gateway-http'
+`);
+
+      expect(() => new YamlConfigValidator().validate_1_0_0(config)).toThrow();
+    });
+
     test('accepts service-level agent session readiness overrides in dev config', () => {
       const parser = new YamlConfigParser();
       const config = parser.parseYamlConfigFromString(`---
