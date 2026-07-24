@@ -747,6 +747,10 @@ export async function constructHelmCustomValueConfiguration(
   const chartName = helm?.chart?.name;
   const serviceName = deployable?.name || deploy.uuid || 'service';
 
+  if (helm?.gatewayApi?.enabled && chartType !== ChartType.ORG_CHART) {
+    throw new Error('helm.gatewayApi is only supported for org app charts');
+  }
+
   if (chartType === ChartType.ORG_CHART) {
     const orgChartName = await GlobalConfigService.getInstance().getOrgChartName();
     const initEnvVars = scaffoldHelmSecretRefs(

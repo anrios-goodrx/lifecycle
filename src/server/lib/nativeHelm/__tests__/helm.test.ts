@@ -1168,6 +1168,25 @@ describe('Native Helm', () => {
 
     it('emits gatewayApi values and suppresses legacy routing for opted-in services', async () => {
       mockGetAllConfigs.mockResolvedValue({
+        helmDefaults: {
+          gatewayApi: {
+            enabled: true,
+            gatewayNamespace: 'envoy-gateway-system',
+          },
+        },
+        'lifecycle-app': {
+          gatewayApi: {
+            gateway: 'external',
+            gateways: {
+              grpc: {
+                external: 'community-gateway-grpc',
+              },
+            },
+          },
+          chart: {
+            values: [],
+          },
+        },
         serviceDefaults: {
           defaultIPWhiteList: '[1.1.1.1/32, 2.2.2.2/32]',
         },
@@ -1176,11 +1195,6 @@ describe('Native Helm', () => {
           altHttp: ['preview-alt.lifecycle.com'],
           grpc: 'grpc.preview.lifecycle.com',
           altGrpc: ['grpc-alt.preview.lifecycle.com'],
-        },
-        'lifecycle-app': {
-          chart: {
-            values: [],
-          },
         },
       });
 
@@ -1195,13 +1209,7 @@ describe('Native Helm', () => {
             chart: { name: 'lifecycle-app', values: [] },
             grpc: true,
             gatewayApi: {
-              enabled: true,
-              gateway: 'external',
-              gateways: {
-                grpc: {
-                  external: 'community-gateway-grpc',
-                },
-              },
+              protocol: 'grpc',
             },
             docker: {
               app: {},
@@ -1220,6 +1228,7 @@ describe('Native Helm', () => {
       expect(customValues).toContain('gatewayApi.protocol=grpc');
       expect(customValues).toContain('gatewayApi.gateway=external');
       expect(customValues).toContain('gatewayApi.gateways.grpc.external=community-gateway-grpc');
+      expect(customValues).toContain('gatewayApi.gatewayNamespace=envoy-gateway-system');
       expect(customValues).toContain('gatewayApi.port=8080');
       expect(customValues).toContain('gatewayApi.hostnames[0]=test-uuid.grpc.preview.lifecycle.com');
       expect(customValues).toContain('gatewayApi.hostnames[1]=test-uuid.grpc-alt.preview.lifecycle.com');
@@ -1228,6 +1237,43 @@ describe('Native Helm', () => {
       expect(customValues).toContain('gatewayApi.securityPolicy.allowedCIDRs[1]=2.2.2.2/32');
       expect(customValues.some((value) => value.startsWith('ambassadorMappings['))).toBe(false);
       expect(customValues.some((value) => value.startsWith('ingress.'))).toBe(false);
+    });
+
+    it('rejects gatewayApi for public charts in native Helm mode', async () => {
+      mockGetAllConfigs.mockResolvedValue({
+        helmDefaults: {
+          gatewayApi: {
+            enabled: true,
+            gateway: 'external',
+          },
+        },
+        nginx: {
+          chart: {
+            values: [],
+          },
+        },
+      });
+
+      const deploy = {
+        uuid: 'test-uuid',
+        deployable: {
+          buildUUID: 'build-123',
+          helm: {
+            chart: {
+              name: 'nginx',
+              values: [],
+            },
+          },
+        },
+        build: {
+          commentRuntimeEnv: {},
+          isStatic: false,
+        },
+      } as any;
+
+      await expect(constructHelmCustomValueConfiguration(deploy, ChartType.PUBLIC)).rejects.toThrow(
+        'helm.gatewayApi is only supported for org app charts'
+      );
     });
 
     it('keeps underscore env keys intact for direct helm values', async () => {

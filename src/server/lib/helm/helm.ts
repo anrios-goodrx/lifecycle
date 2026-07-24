@@ -48,6 +48,22 @@ import { buildLifecycleGatewayApiConfig } from 'server/lib/helm/gatewayApi';
 const CODEFRESH_PATH = `${TMP_PATH}/codefresh`;
 const escapeCodefreshEnvKey = (key: string) => key.replace(/_/g, '__');
 
+function mergeGatewayApiConfig(configs: Record<string, any>, helm: Record<string, any> | undefined) {
+  const chartName = helm?.chart?.name;
+  const helmDefaults = configs.helmDefaults || {};
+  const chartConfig = chartName ? configs[chartName] || {} : {};
+
+  if (!helmDefaults.gatewayApi && !chartConfig.gatewayApi && !helm?.gatewayApi) {
+    return undefined;
+  }
+
+  return {
+    ...(helmDefaults.gatewayApi || {}),
+    ...(chartConfig.gatewayApi || {}),
+    ...(helm?.gatewayApi || {}),
+  };
+}
+
 /**
  * Generates codefresh deployment step for public Helm charts.
  * We are manily using the `helm` column from deployable table.
@@ -62,6 +78,11 @@ export async function helmPublicDeployStep(deploy: Deploy): Promise<Record<strin
   const { deployable, build } = deploy;
   const { helm } = deployable || {};
   const { chart } = helm || {};
+  const resolvedGatewayApi = mergeGatewayApiConfig(configs, helm);
+
+  if (resolvedGatewayApi?.enabled) {
+    throw new Error('helm.gatewayApi is only supported for org app charts');
+  }
 
   const templateResolvedValues = await renderTemplate(deploy.build, chart.values);
   let customValues = mergeKeyValueArrays(configs[chart?.name]?.chart?.values, templateResolvedValues, '=');
@@ -136,6 +157,7 @@ export async function helmOrgAppDeployStep(deploy: Deploy): Promise<Record<strin
     deployable?.builder?.engine
   );
   const orgChartName = await GlobalConfigService.getInstance().getOrgChartName();
+  const resolvedGatewayApi = mergeGatewayApiConfig(configs, helm);
 
   const partialCustomValues = mergeKeyValueArrays(configs[orgChartName].chart?.values, chart?.values, '=');
   const customValues = mergeKeyValueArrays(partialCustomValues, templateResolvedValues, '=');
@@ -172,8 +194,14 @@ export async function helmOrgAppDeployStep(deploy: Deploy): Promise<Record<strin
   const isDisableIngressHost: boolean | undefined = helm?.disableIngressHost;
   const grpc: boolean | undefined = helm?.grpc;
   const ingress = await httpIngress(deploy);
-  if (helm?.gatewayApi?.enabled) {
-    customValues.push(...(await gatewayApiValues(deploy)));
+  if (resolvedGatewayApi?.enabled) {
+    customValues.push(
+      ...(await gatewayApiValues(deploy, {
+        gatewayApi: resolvedGatewayApi,
+        grpc,
+        overrideDefaultIpWhitelist: helm?.overrideDefaultIpWhitelist,
+      }))
+    );
   } else if (grpc) {
     const mappings = await grpcMapping(deploy);
     customValues.push(...mappings);
@@ -456,9 +484,16 @@ function addHelmCustomValues(): string[] {
   return [];
 }
 
-async function gatewayApiValues(deploy: Deploy): Promise<string[]> {
+async function gatewayApiValues(
+  deploy: Deploy,
+  helmConfig?: {
+    gatewayApi?: Record<string, unknown>;
+    grpc?: boolean;
+    overrideDefaultIpWhitelist?: boolean;
+  }
+): Promise<string[]> {
   const { domainDefaults, serviceDefaults } = await GlobalConfigService.getInstance().getAllConfigs();
-  const gatewayApi = deploy.deployable?.helm?.gatewayApi;
+  const gatewayApi = helmConfig?.gatewayApi || deploy.deployable?.helm?.gatewayApi;
 
   if (!gatewayApi?.enabled) {
     return [];
@@ -469,6 +504,7 @@ async function gatewayApiValues(deploy: Deploy): Promise<string[]> {
       deploy,
       domainDefaults,
       serviceDefaults,
+      helmConfig,
     }),
     'gatewayApi'
   );

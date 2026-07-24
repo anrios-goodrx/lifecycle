@@ -20,6 +20,7 @@ mockRedisClient();
 import {
   constructHelmDeploysBuildMetaData,
   grpcMapping,
+  helmDeployStep,
   helmOrgAppDeployStep,
   uninstallHelmReleases,
 } from 'server/lib/helm';
@@ -482,7 +483,21 @@ describe('Helm tests', () => {
         lifecycleDefaults: {
           cfStepType: 'helm',
         },
+        helmDefaults: {
+          gatewayApi: {
+            enabled: true,
+            gatewayNamespace: 'envoy-gateway-system',
+          },
+        },
         'lifecycle-app': {
+          gatewayApi: {
+            gateway: 'external',
+            gateways: {
+              grpc: {
+                external: 'community-gateway-grpc',
+              },
+            },
+          },
           chart: {
             values: [],
           },
@@ -518,13 +533,7 @@ describe('Helm tests', () => {
             },
             grpc: true,
             gatewayApi: {
-              enabled: true,
-              gateway: 'external',
-              gateways: {
-                grpc: {
-                  external: 'community-gateway-grpc',
-                },
-              },
+              protocol: 'grpc',
             },
             docker: {
               app: {},
@@ -546,6 +555,7 @@ describe('Helm tests', () => {
       expect(customValues).toContain('gatewayApi.protocol=grpc');
       expect(customValues).toContain('gatewayApi.gateway=external');
       expect(customValues).toContain('gatewayApi.gateways.grpc.external=community-gateway-grpc');
+      expect(customValues).toContain('gatewayApi.gatewayNamespace=envoy-gateway-system');
       expect(customValues).toContain('gatewayApi.port=8080');
       expect(customValues).toContain('gatewayApi.hostnames[0]=test-uuid.grpc.preview.lifecycle.com');
       expect(customValues).toContain('gatewayApi.hostnames[1]=test-uuid.grpc-alt.preview.lifecycle.com');
@@ -595,7 +605,6 @@ describe('Helm tests', () => {
             grpc: true,
             gatewayApi: {
               enabled: true,
-              gateway: 'external',
             },
             docker: {
               app: {},
@@ -613,6 +622,53 @@ describe('Helm tests', () => {
       await expect(helmOrgAppDeployStep(deploy)).rejects.toThrow(
         'helm.gatewayApi requires gateway or gatewayName when routes are not provided'
       );
+    });
+
+    test('rejects gateway api for non-org charts in the CI Helm path', async () => {
+      const mockGetAllConfigs = jest.fn().mockResolvedValue({
+        lifecycleDefaults: {
+          deployCluster: 'test-cluster',
+          cfStepType: 'helm',
+        },
+        helmDefaults: {
+          gatewayApi: {
+            enabled: true,
+            gateway: 'external',
+          },
+        },
+        nginx: {
+          chart: {
+            values: [],
+          },
+        },
+      });
+      const mockGetOrgChartName = jest.fn().mockResolvedValue('lifecycle-app');
+
+      (GlobalConfigService.getInstance as jest.Mock).mockReturnValue({
+        getAllConfigs: mockGetAllConfigs,
+        getOrgChartName: mockGetOrgChartName,
+      });
+
+      const deploy = {
+        uuid: 'test-uuid',
+        deployable: {
+          buildUUID: 'build-123',
+          helm: {
+            chart: {
+              name: 'nginx',
+              values: [],
+              version: '1.0.0',
+            },
+            docker: {},
+          },
+        },
+        build: {
+          namespace: 'env-test',
+        },
+        $fetchGraph: jest.fn(),
+      } as unknown as Deploy;
+
+      await expect(helmDeployStep(deploy)).rejects.toThrow('helm.gatewayApi is only supported for org app charts');
     });
   });
 });
